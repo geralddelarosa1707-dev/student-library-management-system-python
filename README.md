@@ -33,3 +33,7 @@ python student_library_management_system.py
 ## Notes
 • The program automatically creates a library_data.json file to store data.
 • Data will be saved even after closing the program.
+
+## Author
+Gerald G. Dela Rosa
+Grade 11 student
