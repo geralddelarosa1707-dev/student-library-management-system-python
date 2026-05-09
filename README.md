@@ -19,6 +19,7 @@ Python CLI app that manages books and student borrowing records using JSON and J
 ## How to Run
 ```bash
 python app.py
+```
 
 ## Notes
 - Data is stored locally using JSON files
