@@ -16,6 +16,10 @@ Python CLI app that manages books and student borrowing records using JSON and J
 - JSON / JSONL (file storage)
 - Object-Oriented Programming (OOP)
 
+## How to Run
+```bash
+python app.py
+
 ## Notes
 - Data is stored locally using JSON files
 - Audit logs are stored using JSONL format
