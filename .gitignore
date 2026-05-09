@@ -1,2 +1,13 @@
-library_data.json
+# Python cache
 __pycache__/
+*.pyc
+
+# Log files
+*.log
+
+# Local JSON data files
+library_data.json
+audit_log.jsonl
+
+# Temporary files
+*.tmp
