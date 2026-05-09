@@ -1,0 +1,15 @@
+{
+    "books": {
+        "B001": {
+            "title": "Zero to One",
+            "author": "Peter Thiel",
+            "year_published": 2014,
+            "stock": 19
+        }
+    },
+    "students_borrowed": {
+        "GERALD": {
+            "B001": 1
+        }
+    }
+}
