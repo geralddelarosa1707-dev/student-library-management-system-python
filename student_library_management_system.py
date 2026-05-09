@@ -1,11 +1,9 @@
+from logger import logger
+from datetime import datetime
 import json
 import os
 
 print("Welcome to Student Library Management System!")
-
-books = {}
-
-students_borrowed = {}
 
 menu = {
   "ADD": "Add new book",
@@ -13,9 +11,13 @@ menu = {
   "BORROW": "Borrowed book",
   "RETURN": "Returned book",
   "SEARCH-S": "Search student",
+  "SEARCH-LS": "Search log by student",
   "SEARCH-B": "Search book",
   "UPDATE-B": "Update book info",
   "VIEW": "View borrowed books per students",
+  "VIEW-BH": "View borrowed history",
+  "VIEW-RH": "View returned history",
+  "VIEW-H": "View history",
   "CHECK": "Check available books"
 }
 
@@ -24,116 +26,344 @@ def show_menu(menu):
   for option, detail in menu.items():
     print(f"{option}: {detail}")
   print("--------------------------------")
-  
-def can_add_book(books, enter_id):
-  if not enter_id:
-    print("\nPlease enter a book ID.")
-    return False
-      
-  if enter_id in books:
-    print("\nID already exist.")
-    return False
+
+class Book:
+  def __init__(self, title, author, year_published, stock):
+    self.title = title
+    self.author = author
+    self.year_published = year_published
+    self.stock = stock
     
-  return True
-  
-def can_remove_book(books, students_borrowed, remove_book):
-  if not remove_book:
-    print("\nPlease enter a book ID.")
-    return False
+  def to_dict(self):
+    return {
+      "title": self.title,
+      "author": self.author,
+      "year_published": self.year_published,
+      "stock": self.stock
+    }
     
-  if remove_book not in books:
-    print(f"\n{remove_book} Book ID not found.")
-    return False
-      
-  for student in students_borrowed:
-    if remove_book in students_borrowed[student]:
-      print("\nCannot remove. Some student still borrowed this book.")
-      return False
-      
-  return True
-  
-def can_borrow(books, enter_book_id):
-  if not enter_book_id:
-    print("\nPlease enter a book ID.")
-    return False
-      
-  if enter_book_id not in books:
-    print("\nBook not found in the system.")
-    return False
+class StudentsBorrowed:
+  def __init__(self):
+    self.students_borrowed = {}
     
-  return True
-  
-def can_return(enter_book_id, check_book):
-  if not enter_book_id:
-    print("\nPlease enter a book ID.")
-    return False
-        
-  if enter_book_id not in check_book:
-    print("\nThe student didn't borrow the book.")
-    return False
-  
-  return True
-  
-def show_students_borrowed(students_borrowed, books):
-  if not students_borrowed:
-    print("\nThere are no students who have borrowed books yet.")
-    return False
+  def show_students_borrowed(self, app):
+    books = app.library.books
     
-  print("\n-------------STUDENTS BORROWED---------------")
-  for student, book_borrowed in students_borrowed.items():
-    if not book_borrowed:
-      print(f"{student.title()}: Didn't borrow")
-    else:
-      print(f"{student.title()}:")
+    output = []
+    
+    if not self.students_borrowed:
+      return False, "There are no students who have borrowed books yet."
+    
+    for student, book_borrowed in self.students_borrowed.items():
+      
+      if not book_borrowed:
+        output.append(f"{student}: Didn't borrow")
+        continue
+      
+      output.append(f"{student}:")
       
       for book_id, quantity in book_borrowed.items():
-        if book_id in books:
-          title, author, year_published, stock = books[book_id]
-          
-          print(f" - {title} ({book_id}) x{quantity}")
-          
-        else:
-          print(f" - Unknown book ({book_id})")
+        book = books.get(book_id)
         
-  print("---------------------------------------------")
+        if book is None:
+          output.append(f" - Unknown book ({book_id})")
+        else:
+          output.append(f" - {book.title} ({book_id}) x{quantity}")
   
-  return True
-  
-def show_available_books(books):
-  if not books:
-    print("\nThere are no books available yet.")
-    return False
+    return True, "\n".join(output)
     
-  print("\n------------------BOOKS------------------")
-  for book_id, info in books.items():
-    title, author, year_published, stock = info
+  def search_student(self, name, app):
+    books = app.library.books
     
-    print(f"{book_id}: '{title.title()}' {author.title()} - {year_published} : x{stock}")
-  print("-----------------------------------------")
-  
-  return True
-  
-def load_data():
-  if os.path.exists("library_data.json"):
-    try:
-      with open("library_data.json", "r") as file:
-        data = json.load(file)
-        return data.get("books", {}), data.get("students_borrowed", {})
-    except json.JSONDecodeError:
-      print("\nWarning: Data file is corrupted. Starting fresh.")
+    output = []
       
-  return {}, {}
+    if name not in self.students_borrowed:
+      return False, "\nStudent not found."
+        
+    book_borrowed = self.students_borrowed[name]
+        
+    if not book_borrowed:
+      return False, f"\n{name}: Didn't borrow"
+      
+    for book_id, quantity in book_borrowed.items():
+      info = books.get(book_id)
+      
+      if info is None:
+        output.append(f" - Unknown book ({book_id})")
+      else:
+        output.append(f" - {info.title} ({book_id}) x{quantity}")
+        
+    return True, f"{name}:\n" + "\n".join(output)
     
-def save_data(books, students_borrowed):
-  data = {
-    "books": books,
-    "students_borrowed": students_borrowed
-  }
+  def borrow_book(self, name, enter_book_id, info, num_books_borrowed):
+    info.stock -= num_books_borrowed
+      
+    borrowed = self.students_borrowed
+      
+    borrowed.setdefault(name, {})
+        
+    borrowed[name][enter_book_id] = borrowed[name].get(enter_book_id, 0) + num_books_borrowed
   
-  with open("library_data.json", "w") as file:
-    json.dump(data, file, indent=4)
+class BookManager:
+  def __init__(self):
+    self.books = {}
+    
+  def show_available_books(self):
+    output = []
+    
+    if not self.books:
+      return False, "There are no books available yet."
+  
+    for book_id, info in self.books.items():
+      output.append(f"{book_id}: '{info.title}' {info.author} - {info.year_published} : x{info.stock}")
+  
+    return True, "\n".join(output)
+    
+  def can_add_book(self, enter_id):
+    if not enter_id:
+      return False, "\nPlease enter a book ID.", "BOOK_ID_NOT_PROVIDED"
+      
+    if enter_id in self.books:
+      return False, "\nID already exist", "ID ALREADY EXIST."
+    
+    return True, "\nAdded successfully!", None
+  
+  def can_remove_book(self, remove_book, info, app):
+    borrowed_books = app.borrowed.students_borrowed
+    
+    output = []
+    
+    if not remove_book:
+      return False, "Please enter a book ID.", "BOOK_ID_NOT_PROVIDED"
+    
+    if remove_book not in self.books:
+      return False, f"{remove_book} Book ID not found.", "BOOK_ID_NOT_FOUND"
+      
+    for books in borrowed_books.values():
+      if remove_book in books:
+        output.append("Cannot remove. Some student still borrowed this book.")
+        return False, "\n".join(output), "CANNOT_REMOVE,BOOK_STILL_BORROWED"
+      
+    return True, f"\n'{info.title}' removed successfully!", None
+  
+  def can_borrow(self, enter_book_id):
+    if not enter_book_id:
+      return False, "\nPlease enter a book ID.", "BOOK_ID_NOT_PROVIDED"
+      
+    if enter_book_id not in self.books:
+      return False, "\nBook not found in the system.", "BOOK_NOT_FOUND"
+    
+    return True, "\nBorrowed successfully!", None
+  
+  def can_return(self, enter_book_id, check_book):
+    if not enter_book_id:
+      return False, "\nPlease enter a book ID.", "BOOK_ID_NOT_PROVIDED"
+        
+    if enter_book_id not in check_book:
+      return False, "\nThe student didn't borrow the book.", "STUDENT_DIDN'T_BORROW_BOOK"
+  
+    return True, "\nReturned successfully!", None
+    
+  def return_book(self, name, enter_book_id, borrowed, quantity_borrowed, num_books_returned):
+    info = self.books[enter_book_id]
+      
+    info.stock += num_books_returned
+      
+    remaining = quantity_borrowed - num_books_returned
+      
+    if remaining > 0:
+      borrowed[name][enter_book_id] = remaining
+    else:
+      borrowed[name].pop(enter_book_id)
+        
+      if not borrowed[name]:
+        borrowed.pop(name)
+    
+  def search_book(self, title):
+    found = False
+    
+    output = []
+      
+    for book_id, info in self.books.items():
+      if title.lower() in info.title.lower():
+        output.append(f"{book_id}: '{info.title}' - {info.author} {info.year_published}: x{info.stock}")
+        found = True
+      
+    if not found:
+      return False, "\nBook not found."
+      
+    return True, "\n".join(output)
+    
+  def update_book(self, book_id, field, value):
+    books = self.books
+    
+    if book_id not in books:
+      return False, f"\n({book_id}) book ID not found.", f"({book_id})_BOOK_ID_NOT_FOUND"
+      
+    info = books[book_id]
+        
+    if field == "TITLE":
+      info.title = value
+          
+    elif field == "AUTHOR":
+      info.author = value
+          
+    elif field == "YEAR_PUBLISHED":
+      if value < 1000 or value > 9999:
+        return False, "\nPlease enter a valid year.", "NOT_VALID_YEAR"
+      info.year_published = value
+          
+    elif field == "STOCK":
+      if value < 0:
+        return False, "\nStock cannot be negative.", "NOT_VALID_STOCK"
+      info.stock = value
+      
+    return True, "\nUpdated successfully!", None
+    
+class App:
+  def __init__(self):
+    self.borrowed = StudentsBorrowed()
+    self.library = BookManager()
+    
+app = App()
+  
+def load_data(app):
+  try:
+    with open("library_data.json", "r") as file:
+      data = json.load(file)
+      
+      if not isinstance(data, dict):
+        print("\nInvalid file format.")
+        return
+        
+      app.library.books = {}
+      
+      books = data.get("books", {})
+      
+      if not isinstance(books, dict):
+        books = {}
+      
+      for book_id, info in books.items():
+        if not isinstance(book_id, str):
+          continue
+        
+        try:
+          book = Book(
+            info["title"],
+            info["author"],
+            info["year_published"],
+            info["stock"]
+            )
+          app.library.books[book_id] = book
+        except (KeyError, TypeError):
+          continue
+        
+      students = data.get("students_borrowed", {})
+      
+      if not isinstance(students, dict):
+        students = {}
+      else:
+        cleaned = {}
+        
+        for name, books in students.items():
+          if not isinstance(name, str):
+            continue
+          
+          if not isinstance(books, dict):
+            continue
+          
+          valid_books = {}
+          
+          for book_id, qty in books.items():
+            if isinstance(book_id, str) and isinstance(qty, int) and qty > 0:
+              valid_books[book_id] = qty
+          
+          if valid_books:
+            cleaned[name] = valid_books
+            
+        students = cleaned
+        
+      app.borrowed.students_borrowed = students
+      
+  except FileNotFoundError:
+    pass
+    
+  except json.JSONDecodeError:
+    logger.error("DATA_FILE_CORRUPTED | REASON=JSONDecodeError")
+    print("\nWarning: Data file is corrupted. Starting fresh.")
+    
+def save_data(app):
+  temp_file = "library_data.json.tmp"
+  main_file = "library_data.json"
+  
+  try:
+    books = {
+      book_id: info.to_dict() for book_id, info in app.library.books.items()
+    }
+  
+    data = {
+      "books": books,
+      "students_borrowed": app.borrowed.students_borrowed
+    }
+      
+    with open(temp_file, "w") as file:
+      json.dump(data, file, indent=4)
+      
+      file.flush()
+      os.fsync(file.fileno())
+      
+    os.replace(temp_file, main_file)
+  except Exception as e:
+    logger.error(f"ERROR_SAVING_DATA | REASON={e}")
+    print("\nError saving data:", e)
+    
+def read_log():
+  logs = []
+  
+  try:
+    with open("audit_log.jsonl", "r") as file:
+      for line in file:
+        logs.append(json.loads(line))
+  
+  except FileNotFoundError:
+    return []
+    
+  except json.JSONDecodeError:
+    logger.error("LOG_FILE_CORRUPTED | REASON=JSONDecodeError")
+    print("Log file corrupted.")
+    return []
+      
+  return logs
+  
+def get_log_by_borrow():
+  return [log for log in read_log() if (log.get("action") or "") == "BORROW"]
+  
+def get_log_by_return():
+  return [log for log in read_log() if (log.get("action") or "") == "RETURN"]
+  
+def get_log_by_student(name):
+  return [log for log in read_log() if (log.get("student") or "") == name]
+    
+def log_action(action, student, book_id, quantity):
+  log_file = "audit_log.jsonl"
+  
+  new_entry = {
+    "action": action.upper(),
+    "student": student.upper(),
+    "book_id": book_id,
+    "quantity": quantity,
+    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+  }
+      
+  try:
+    with open(log_file, "a") as file:
+      file.write(json.dumps(new_entry) + "\n")
+      
+  except Exception as e:
+    logger.error(f"LOGGING_ERROR | REASON={e}")
+    print("\nLogging error:", e)
 
-def run_program():
+def run_program(app):
   while True:
     show_menu(menu)
   
@@ -142,18 +372,20 @@ def run_program():
     if ask_choice == "ADD":
       enter_id = input("\nEnter book ID (exa.B001): ").strip().upper()
       
-      get_id = can_add_book(books, enter_id)
+      success, message, reason = app.library.can_add_book(enter_id)
       
-      if not get_id:
+      if not success:
+        logger.warning(f"ADD_BOOK_FAILED | REASON={reason}")
+        print(message)
         continue
     
-      title = input("\nEnter the Title: ").title()
+      title = input("\nEnter the Title: ")
       
       if not title:
         print("\nPlease enter a title.")
         continue
     
-      author = input("\nEnter the Author: ").title()
+      author = input("\nEnter the Author: ")
       
       if not author:
         print("\nPlease enter an author.")
@@ -170,91 +402,108 @@ def run_program():
       except ValueError:
         print("\nPlease enter only a number.")
         continue
-    
-      books[enter_id] = (title, author, year_published, stock)
-    
-      print("\nAdded successfully!")
       
-      save_data(books, students_borrowed)
+      book = Book(title, author, year_published, stock)
+    
+      app.library.books[enter_id] = book
+      
+      logger.info("ADD_BOOK_SUCCESS")
+      print(message)
+      save_data(app)
     
       input("\nPress Enter to continue...")
       
     elif ask_choice == "REMOVE":
       remove_book = input("\nEnter book ID to remove: ").strip().upper()
       
-      if not can_remove_book(books, students_borrowed, remove_book):
+      info = app.library.books.get(remove_book)
+      
+      success, message, reason = app.library.can_remove_book(remove_book, info, app)
+      
+      if not success:
+        logger.warning(f"REMOVE_BOOK_FAILED | REASON={reason}")
+        print(message)
         continue
-    
-      title, author, year_published, stock = books[remove_book]
         
-      confirm = input(f"\nAre you sure you want to remove '{title.title()}' (y/n): ").lower()
+      confirm = input(f"\nAre you sure you want to remove '{info.title}' (y/n): ").lower()
         
       if confirm != "y":
         print("\nRemoving cancelled!")
         continue
-        
-      del books[remove_book]
-        
-      print(f"\n'{title.title()}' removed successfully!")
-        
-      save_data(books, students_borrowed)
+      
+      book = app.library.books.pop(remove_book)
+      
+      if book is None:
+        continue
+      
+      logger.info("REMOVE_BOOK_SUCCESS")
+      print(message)
+      save_data(app)
        
       input("\nPress Enter to continue...")
     
     elif ask_choice == "BORROW":
-      key_name = input("\nEnter Name: ").strip().upper()
+      name = input("\nEnter Name: ").strip().upper()
       
-      if not key_name:
+      if not name:
         print("\nPlease enter a name.")
         continue
     
       enter_book_id = input("\nEnter the book ID borrowed: ").strip().upper()
       
-      get_borrowed_book = can_borrow(books, enter_book_id)
+      success, message, reason = app.library.can_borrow(enter_book_id)
       
-      if not get_borrowed_book:
+      if not success:
+        logger.warning(f"BORROW_BOOK_FAILED | REASON={reason}")
+        print(message)
         continue
       
-      title, author, year_published, stock = books[enter_book_id]
+      books = app.library.books
+      
+      info = books[enter_book_id]
       
       try:
         num_books_borrowed = int(input("\nEnter number of books borrowed: "))
       except ValueError:
         print("\nPlease enter only a number.")
         continue
+      
+      if num_books_borrowed <= 0:
+        print("\nPlease enter a valid number.")
+        continue
         
-      if stock == 0:
+      if info.stock == 0:
         print("\nOut of stock.")
         continue
       
-      if num_books_borrowed > stock:
-        print(f"\nThere are only {stock} stock/s.")
+      if num_books_borrowed > info.stock:
+        print(f"\nThere are only {info.stock} stock/s.")
         continue
-        
-      books[enter_book_id] = (title, author, year_published, stock - num_books_borrowed)
       
-      students_borrowed.setdefault(key_name, {})
-        
-      students_borrowed[key_name][enter_book_id] = students_borrowed[key_name].get(enter_book_id, 0) + num_books_borrowed
-    
-      print("\nBorrowed successfully!")
+      app.borrowed.borrow_book(name, enter_book_id, info, num_books_borrowed)
       
-      save_data(books, students_borrowed)
+      logger.info("BORROW_BOOK_SUCCESS")
+      print(message)
+      save_data(app)
+      
+      log_action("BORROW", name, enter_book_id, num_books_borrowed)
       
       input("\nPress Enter to continue...")
         
     elif ask_choice == "RETURN":
-      key_name = input("\nEnter Name: ").strip().upper()
+      name = input("\nEnter Name: ").strip().upper()
       
-      if not key_name:
+      if not name:
         print("\nPlease enter a name.")
         continue
       
-      if key_name not in students_borrowed:
+      borrowed = app.borrowed.students_borrowed
+      
+      if name not in borrowed:
         print("\nStudent not found.")
         continue
         
-      check_book = students_borrowed[key_name]
+      check_book = borrowed[name]
       
       if not check_book:
         print("\nStudent didn't borrow any book.")
@@ -262,9 +511,11 @@ def run_program():
         
       enter_book_id = input("\nEnter the book ID returned: ").strip().upper()
         
-      get_returned_book = can_return(enter_book_id, check_book)
+      success, message, reason = app.library.can_return(enter_book_id, check_book)
         
-      if not get_returned_book:
+      if not success:
+        logger.warning(f"RETURN_BOOK_FAILED | REASON={reason}")
+        print(message)
         continue
       
       try:
@@ -277,81 +528,75 @@ def run_program():
         print("\nPlease enter a valid number.")
         continue
       
-      quantity_borrowed = students_borrowed[key_name][enter_book_id]
+      quantity_borrowed = borrowed[name][enter_book_id]
       
       if num_books_returned > quantity_borrowed:
         print(f"\nStudent only borrowed {quantity_borrowed} copy/copies.")
         continue
       
-      title, author, year_published, stock = books[enter_book_id]
+      app.library.return_book(name, enter_book_id, borrowed, quantity_borrowed, num_books_returned)
       
-      books[enter_book_id] = (title, author, year_published, stock + num_books_returned)
+      logger.info("RETURN_BOOK_SUCCESS")
+      print(message)
+      save_data(app)
       
-      remaining = quantity_borrowed - num_books_returned
-      
-      if remaining > 0:
-        students_borrowed[key_name][enter_book_id] = remaining
-      else:
-        del students_borrowed[key_name][enter_book_id]
-        
-        if not students_borrowed[key_name]:
-          del students_borrowed[key_name]
-        
-      print("\nReturned successfully!")
-      
-      save_data(books, students_borrowed)
+      log_action("RETURN", name, enter_book_id, num_books_returned)
         
       input("\nPress Enter to continue...")
       
     elif ask_choice == "SEARCH-S":
-      student_name = input("\nEnter student name: ").strip().upper()
+      name = input("\nEnter student name: ").strip().upper()
       
-      if not student_name:
+      if not name:
         print("\nPlease enter a name.")
         continue
       
-      if student_name not in students_borrowed:
-        print("\nStudent not found.")
-        continue
-        
-      book_borrowed = students_borrowed[student_name]
-        
-      if not book_borrowed:
-        print(f"\n{student_name.title()}: Didn't borrow")
-      else:
-        print(f"\n{student_name.title()}:")
+      success, message = app.borrowed.search_student(name, app)
       
-      for book_id, quantity in book_borrowed.items():
-        if book_id in books:
-          title, author, year_published, stock = books[book_id]
+      if not success:
+        print(message)
+        continue
+      
+      print(message)
+      input("\nPress Enter to continue...")
+      
+    elif ask_choice == "SEARCH-LS":
+      name = input("Enter Name: ").strip().upper()
+      
+      if not name:
+        print("Please enter a name")
+        continue
+      
+      logs = get_log_by_student(name)
+      
+      if not logs:
+        print(f"There are no history with {name}")
+        continue
+      
+      print("\n------------------STUDENT----------------")
+      
+      for log in logs:
+        print("-" * 20)
+        for key, info in log.items():
+          print(f"{key}: {info}")
           
-          print(f" - {title} ({book_id}) x{quantity}")
-          
-        else:
-          print(f" - Unknown book ({book_id})")
-        
+      print("-----------------------------------------")
       input("\nPress Enter to continue...")
       
     elif ask_choice == "SEARCH-B":
-      book_title = input("\nEnter the title of the book: ").strip().title()
+      title = input("\nEnter the title of the book: ").strip()
       
-      if not book_title:
+      if not title:
         print("\nPlease enter a book title.")
         continue
       
-      found = False
+      success, message = app.library.search_book(title)
       
-      for book_id, info in books.items():
-        title, author, year_published, stock = info
-        
-        if book_title.lower() in title.lower():
-          print(f"\n{book_id}: '{title.title()}' {author.title()} {year_published}: x{stock}")
-          found = True
-      
-      if not found:
-        print("\nBook not found.")
+      if not success:
+        print(message)
         continue
-        
+      
+      print(message)
       input("\nPress Enter to continue...")
       
     elif ask_choice == "UPDATE-B":
@@ -361,84 +606,135 @@ def run_program():
         print("\nPlease enter a book ID to update.")
         continue
       
-      if book_id in books:
-        title, author, year_published, stock = books[book_id]
-        
-        print("\nUpdate Options: TITLE | AUTHOR | YEAR_PUBLISHED | STOCK")
-        
-        info_to_update = input("\nWhat would you like to update: ").strip().upper()
-        
-        if info_to_update == "TITLE":
-          update_title = input("\nEnter book title: ").title()
-          
-          if not update_title:
-            print("\nPlease enter a book title.")
-            continue
-          
-          title = update_title
-          
-        elif info_to_update == "AUTHOR":
-          update_author = input("\nEnter book author: ").title()
-          
-          if not update_author:
-            print("\nPlease enter a book author.")
-            continue
-          
-          author = update_author
-          
-        elif info_to_update == "YEAR_PUBLISHED":
-          try:
-            update_year_published = int(input("\nEnter year published: "))
-          except ValueError:
-            print("\nPlease enter only a number.")
-            continue
-          
-          year_published = update_year_published
-          
-        elif info_to_update == "STOCK":
-          try:
-            update_stock = int(input("\nEnter stock: "))
-          except ValueError:
-            print("\nPlease enter only a number.")
-            continue
-          
-          if update_stock < 0:
-            print("\nStock cannot be negative.")
-            continue
-          
-          stock = update_stock
-          
-        else:
-          print("\nPlease enter a valid info to update.")
+      print("\nUpdate Options: TITLE | AUTHOR | YEAR_PUBLISHED | STOCK")
+      
+      field = input("\nWhat would you like to update: ").strip().upper()
+      
+      value = None
+      
+      if field == "TITLE":
+        value = input("\nEnter book title: ")
+        if not value:
+          print("\nPlease enter a book title.")
           continue
         
-        books[book_id] = (title, author, year_published, stock)
+      elif field == "AUTHOR":
+        value = input("\nEnter book author: ")
+        if not value:
+          print("\nPlease enter a book author.")
+          continue
         
-        print("\nUpdated successfully!")
+      elif field == "YEAR_PUBLISHED":
+        try:
+          value = int(input("\nEnter year published: "))
+        except ValueError:
+          print("\nPlease enter only a number.")
+          continue
         
-        save_data(books, students_borrowed)
+      elif field == "STOCK":
+        try:
+          value = int(input("\nEnter stock: "))
+        except ValueError:
+          print("\nPlease enter only a number.")
+          continue
         
       else:
-        print(f"({book_id}) book ID not found.")
+        print("\nPlease enter a valid info to update.")
+        continue
+      
+      success, message, reason = app.library.update_book(book_id, field, value)
+      
+      if not success:
+        logger.warning(f"UPDATE_BOOK_FAILED | REASON={reason}")
+        print(message)
+        continue
+        
+      logger.info("UPDATE_BOOK_SUCCESS")
+      print(message)
+      save_data(app)
         
       input("\nPress Enter to continue...")
     
     elif ask_choice == "VIEW":
-      s_borrowed = show_students_borrowed(students_borrowed, books)
+      print("\n-------------STUDENTS BORROWED---------------")
       
+      success, message = app.borrowed.show_students_borrowed(app)
+      
+      if not success:
+        print(message)
+        continue
+      
+      print(message)
+      print("---------------------------------------------")
+      input("\nPress Enter to continue...")
+      
+    elif ask_choice == "VIEW-BH":
+      logs = get_log_by_borrow()
+      
+      if not logs:
+        print("No borrowed history yet.")
+        continue
+      
+      print("\n------------------BORROW-----------------")
+      
+      for log in logs:
+        print("-" * 20)
+        for key, info in log.items():
+          print(f"{key}: {info}")
+          
+      print("-----------------------------------------")
+      input("\nPress Enter to continue...")
+      
+    elif ask_choice == "VIEW-RH":
+      logs = get_log_by_return()
+      
+      if not logs:
+        print("No returned history yet.")
+        continue
+      
+      print("\n------------------RETURN-----------------")
+    
+      for log in logs:
+        print("-" * 20)
+        for key, info in log.items():
+          print(f"{key}: {info}")
+          
+      print("-----------------------------------------")
+      input("\nPress Enter to continue...")
+      
+    elif ask_choice == "VIEW-H":
+      logs = read_log()
+      
+      print("\n------------------HISTORY----------------")
+      
+      if not logs:
+        print("No history yet.")
+        continue
+      
+      for log in logs:
+        print("-" * 20)
+        for key, info in log.items():
+          print(f"{key}: {info}")
+          
+      print("-----------------------------------------")
       input("\nPress Enter to continue...")
   
     elif ask_choice == "CHECK":
-      avail_books = show_available_books(books)
+      print("\n------------------BOOKS------------------")
       
-      if not avail_books:
+      success, message = app.library.show_available_books()
+      
+      if not success:
+        print(message)
         continue
       
+      print(message)
+      print("-----------------------------------------")
       input("\nPress Enter to continue...")
     
     else:
       print("\nPlease enter a valid option.")
 
 if __name__ == "__main__":
-  books, students_borrowed = load_data()
-  run_program()
+  load_data(app)
+  run_program(app)
