@@ -5,9 +5,5 @@ __pycache__/
 # Log files
 *.log
 
-# Local JSON data files
-library_data.json
-audit_log.jsonl
-
-# Temporary files
-*.tmp
+# database files
+*.db
