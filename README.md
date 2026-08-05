@@ -1,5 +1,5 @@
 # Student Library Management System
-Python CLI app that manages books and student borrowing records using JSON and JSONL file storage.
+Python GUI app that manages books and student borrowing records using SQLite file storage.
 
 ## Features
 - Add and remove books
@@ -7,13 +7,13 @@ Python CLI app that manages books and student borrowing records using JSON and J
 - Search students and books
 - Update book information
 - View borrowed books per student
-- Audit log system using JSONL
-- JSON-based data persistence
+- Audit log system using SQLite
+- SQLite-based data persistence
 - Structured logging for debugging
 
 ## Tech Used
 - Python
-- JSON / JSONL (file storage)
+- SQLite (file storage)
 - Object-Oriented Programming (OOP)
 
 ## How to Run
@@ -22,10 +22,9 @@ python app.py
 ```
 
 ## Notes
-- Data is stored locally using JSON files
-- Audit logs are stored using JSONL format
-- Built for learning purposes and practicing OOP concepts
+- Data is stored locally using SQL or db file.
+- Built for learning purposes, practicing OOP concepts, GUI programming, and SQLite for database
 
 ## Author
 Gerald G. Dela Rosa
-Grade 11 Student | Aspiring Software Developer
+Grade 12 Student | Aspiring Software Developer
