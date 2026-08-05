@@ -14,6 +14,7 @@ Python GUI app that manages books and student borrowing records using SQLite fil
 ## Tech Used
 - Python
 - SQLite (file storage)
+- GUI programming 
 - Object-Oriented Programming (OOP)
 
 ## How to Run
